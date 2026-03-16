@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Exposure · Canadian Job Market · NOC 2021</title>
+<meta name="description" content="How exposed is every Canadian occupation to AI automation? Interactive treemap of all 418 NOC 2021 unit groups.">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root{
+  --bg:#08090d;--surface:#0f1118;--surface2:#171b26;--border:#1c2035;
+  --text:#dde3f0;--muted:#58627a;--dim:#3a4157;
+  --accent:#e4f23a;--accent-dark:#b8c42a;
+  --green:#3ddc84;--yellow:#f5c842;--orange:#f07c20;--red:#e8403a;
+  --teal:#25c9b0;--purple:#9b7de8;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;display:flex;flex-direction:column;}
+
+/* ── Top bar ─────────────────────────────────────────────── */
+#topbar{
+  flex:0 0 auto;padding:14px 24px 10px;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:20px;flex-wrap:wrap;
+}
+.logo{display:flex;flex-direction:column;gap:2px;margin-right:auto;}
+.logo-eye{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.13em;}
+.logo-title{font-size:clamp(15px,1.8vw,22px);font-weight:800;letter-spacing:-.02em;line-height:1;}
+.logo-title span{color:var(--accent);}
+
+.stat-pill{
+  display:flex;flex-direction:column;align-items:flex-end;
+  font-family:'JetBrains Mono',monospace;
+}
+.stat-pill .val{font-size:17px;font-weight:700;color:var(--accent);line-height:1;}
+.stat-pill .lbl{font-size:9px;color:var(--muted);letter-spacing:.05em;}
+
+/* ── Controls bar ────────────────────────────────────────── */
+#controls{
+  flex:0 0 auto;padding:7px 24px;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+}
+.search-wrap{position:relative;flex:0 0 220px;}
+.search-wrap svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;}
+input[type=search]{
+  width:100%;background:var(--surface2);border:1px solid var(--border);
+  color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px;
+  padding:6px 8px 6px 28px;border-radius:5px;outline:none;transition:border-color .15s;
+}
+input[type=search]:focus{border-color:var(--accent);}
+input[type=search]::placeholder{color:var(--muted);}
+
+.chip-group{display:flex;gap:5px;flex-wrap:wrap;}
+.chip{
+  background:var(--surface2);border:1px solid var(--border);color:var(--muted);
+  font-family:'JetBrains Mono',monospace;font-size:10px;
+  padding:4px 10px;border-radius:20px;cursor:pointer;transition:all .12s;white-space:nowrap;
+}
+.chip:hover{border-color:var(--dim);color:var(--text);}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#000;}
+
+.view-toggle{display:flex;gap:0;margin-left:auto;}
+.view-btn{
+  background:var(--surface2);border:1px solid var(--border);color:var(--muted);
+  font-family:'JetBrains Mono',monospace;font-size:10px;
+  padding:5px 12px;cursor:pointer;transition:all .12s;
+}
+.view-btn:first-child{border-radius:5px 0 0 5px;}
+.view-btn:last-child{border-radius:0 5px 5px 0;border-left:none;}
+.view-btn.on{background:var(--accent);border-color:var(--accent);color:#000;}
+
+/* ── Legend ──────────────────────────────────────────────── */
+#legend{
+  flex:0 0 auto;padding:5px 24px;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;
+  font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);
+}
+.grad-bar{width:130px;height:7px;border-radius:4px;background:linear-gradient(to right,#3ddc84,#f5c842,#f07c20,#e8403a);}
+#legend-right{margin-left:auto;display:flex;align-items:center;gap:6px;}
+.outcome-dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+
+/* ── Main content area ───────────────────────────────────── */
+#main{flex:1 1 0;display:flex;overflow:hidden;min-height:0;}
+
+/* ── Treemap panel ───────────────────────────────────────── */
+#treemap-panel{flex:1 1 0;position:relative;overflow:hidden;}
+#treemap{width:100%;height:100%;display:block;cursor:crosshair;}
+
+/* ── List panel ──────────────────────────────────────────── */
+#list-panel{
+  flex:1 1 0;overflow-y:auto;
+  display:none;
+}
+#list-panel.visible{display:block;}
+#list-head{
+  display:grid;grid-template-columns:60px 1fr 80px 100px 80px 90px;
+  padding:8px 24px;border-bottom:1px solid var(--border);
+  font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);
+  position:sticky;top:0;background:var(--bg);z-index:10;gap:8px;
+}
+.list-head-cell{cursor:pointer;user-select:none;display:flex;align-items:center;gap:4px;}
+.list-head-cell:hover{color:var(--text);}
+.sort-arrow{opacity:.4;font-size:10px;}
+.list-head-cell.sorted .sort-arrow{opacity:1;color:var(--accent);}
+#list-body{padding:4px 0;}
+.list-row{
+  display:grid;grid-template-columns:60px 1fr 80px 100px 80px 90px;
+  padding:7px 24px;gap:8px;align-items:center;
+  border-bottom:1px solid rgba(28,32,53,.5);cursor:pointer;
+  transition:background .1s;
+}
+.list-row:hover{background:var(--surface2);}
+.list-row.selected{background:rgba(228,242,58,.06);border-left:2px solid var(--accent);}
+.lr-code{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);}
+.lr-title{font-size:12px;font-weight:600;line-height:1.3;}
+.lr-teer{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);}
+.lr-wage{font-family:'JetBrains Mono',monospace;font-size:10px;}
+.lr-emp{font-family:'JetBrains Mono',monospace;font-size:10px;}
+.lr-score{display:flex;align-items:center;gap:5px;}
+.score-badge{
+  min-width:30px;height:22px;border-radius:4px;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:#000;
+}
+.score-bar-bg{flex:1;height:4px;background:var(--border);border-radius:2px;}
+.score-bar-fill{height:100%;border-radius:2px;}
+.outlook-chip{
+  display:inline-flex;align-items:center;gap:3px;
+  font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 6px;
+  border-radius:10px;font-weight:500;
+}
+
+/* ── Detail panel ────────────────────────────────────────── */
+#detail-panel{
+  flex:0 0 320px;border-left:1px solid var(--border);
+  overflow-y:auto;display:none;background:var(--surface);
+}
+#detail-panel.visible{display:block;}
+
+#detail-inner{padding:20px;}
+.dp-code{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);margin-bottom:6px;}
+.dp-score-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px;}
+.dp-title{font-size:16px;font-weight:800;line-height:1.25;letter-spacing:-.01em;}
+.dp-big-score{
+  flex-shrink:0;width:52px;height:52px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:#000;
+}
+.dp-boc{font-size:11px;color:var(--muted);margin-bottom:4px;}
+.dp-teer{font-size:11px;color:var(--muted);margin-bottom:12px;}
+.dp-bar-row{margin-bottom:14px;}
+.dp-bar-label{display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:4px;}
+.dp-bar-bg{height:6px;background:var(--border);border-radius:3px;}
+.dp-bar-fill{height:100%;border-radius:3px;}
+.dp-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;}
+.dp-stat-label{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px;}
+.dp-stat-val{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:500;}
+.dp-divider{height:1px;background:var(--border);margin:14px 0;}
+.dp-section-title{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;}
+.dp-rationale{font-size:12px;line-height:1.6;color:rgba(221,227,240,.7);}
+.dp-outlook-row{display:flex;align-items:center;gap:8px;margin-bottom:14px;}
+.dp-close{
+  position:absolute;top:12px;right:12px;background:none;border:none;
+  color:var(--muted);cursor:pointer;font-size:18px;line-height:1;
+  padding:4px;border-radius:4px;
+}
+.dp-close:hover{color:var(--text);background:var(--surface2);}
+.dp-share-btn{
+  width:100%;background:var(--surface2);border:1px solid var(--border);
+  color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:10px;
+  padding:7px;border-radius:5px;cursor:pointer;transition:all .12s;
+  margin-top:12px;display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.dp-share-btn:hover{border-color:var(--accent);color:var(--accent);}
+.dp-share-btn.copied{background:rgba(61,220,132,.1);border-color:var(--green);color:var(--green);}
+
+/* ── Tooltip ─────────────────────────────────────────────── */
+#tooltip{
+  position:fixed;pointer-events:none;z-index:200;opacity:0;
+  transition:opacity .12s;max-width:290px;
+}
+.tt-inner{
+  background:#111520;border:1px solid var(--border);border-radius:8px;
+  padding:12px 14px;box-shadow:0 16px 48px rgba(0,0,0,.8);
+}
+.tt-code{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--accent);margin-bottom:3px;}
+.tt-title{font-size:12px;font-weight:700;margin-bottom:4px;line-height:1.3;}
+.tt-cat{font-size:10px;color:var(--muted);margin-bottom:8px;}
+.tt-score-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.tt-badge{width:34px;height:34px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#000;flex-shrink:0;}
+.tt-score-bar-bg{flex:1;height:4px;background:var(--border);border-radius:2px;}
+.tt-score-bar-fill{height:100%;border-radius:2px;}
+.tt-meta{display:flex;gap:12px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);}
+
+/* ── Loading overlay ─────────────────────────────────────── */
+#loading{
+  position:fixed;inset:0;background:var(--bg);z-index:1000;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+}
+#loading.hidden{display:none;}
+.spinner{width:32px;height:32px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loading-text{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);}
+
+/* ── No results ──────────────────────────────────────────── */
+#no-results{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);
+  text-align:center;display:none;
+}
+
+/* ── Footer ──────────────────────────────────────────────── */
+#footer{
+  flex:0 0 auto;padding:6px 24px;border-top:1px solid var(--border);
+  display:flex;justify-content:space-between;
+  font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);
+}
+#footer a{color:var(--accent);text-decoration:none;}
+#footer a:hover{text-decoration:underline;}
+
+@media(max-width:768px){
+  #topbar,#controls,#legend,#footer{padding-left:12px;padding-right:12px;}
+  .stat-pill:nth-child(n+3){display:none;}
+  #detail-panel.visible{position:fixed;inset:0;z-index:100;overflow-y:auto;}
+  .list-row{grid-template-columns:55px 1fr 70px 80px;}
+  #list-head{grid-template-columns:55px 1fr 70px 80px;}
+  .lr-emp,.lr-wage,.dp-grid{display:none;}
+}
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <div class="loading-text">Loading NOC data…</div>
+</div>
+
+<!-- Top bar -->
+<div id="topbar">
+  <div class="logo">
+    <span class="logo-eye">NOC 2021 · CANADA</span>
+    <h1 class="logo-title">AI Exposure of the <span>Canadian Job Market</span></h1>
+  </div>
+  <div class="stat-pill"><span class="val" id="s-count">—</span><span class="lbl">OCCUPATIONS</span></div>
+  <div class="stat-pill"><span class="val" id="s-avg">—</span><span class="lbl">AVG SCORE</span></div>
+  <div class="stat-pill"><span class="val" id="s-jobs">—</span><span class="lbl">JOBS (000s)</span></div>
+</div>
+
+<!-- Controls -->
+<div id="controls">
+  <div class="search-wrap">
+    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+    </svg>
+    <input type="search" id="search" placeholder="Search occupations or NOC code…" autocomplete="off">
+  </div>
+
+  <div class="chip-group" id="teer-chips">
+    <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);align-self:center;">TEER:</span>
+    <button class="chip on" data-teer="all">All</button>
+    <button class="chip" data-teer="0">0</button>
+    <button class="chip" data-teer="1">1</button>
+    <button class="chip" data-teer="2">2</button>
+    <button class="chip" data-teer="3">3</button>
+    <button class="chip" data-teer="4">4</button>
+    <button class="chip" data-teer="5">5</button>
+  </div>
+
+  <div class="chip-group" id="boc-chips" style="margin-left:4px;">
+    <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);align-self:center;">Sector:</span>
+    <button class="chip on" data-boc="all">All</button>
+    <button class="chip" data-boc="0">Mgmt</button>
+    <button class="chip" data-boc="1">Business</button>
+    <button class="chip" data-boc="2">Science</button>
+    <button class="chip" data-boc="3">Health</button>
+    <button class="chip" data-boc="4">Education</button>
+    <button class="chip" data-boc="5">Arts</button>
+    <button class="chip" data-boc="6">Sales</button>
+    <button class="chip" data-boc="7">Trades</button>
+    <button class="chip" data-boc="8">Resources</button>
+    <button class="chip" data-boc="9">Mfg</button>
+  </div>
+
+  <div class="view-toggle">
+    <button class="view-btn on" id="btn-treemap">Treemap</button>
+    <button class="view-btn" id="btn-list">List</button>
+  </div>
+</div>
+
+<!-- Legend -->
+<div id="legend">
+  <span>AI Exposure:</span>
+  <div class="grad-bar"></div>
+  <span>0 &nbsp;→&nbsp; 10</span>
+  <span style="color:var(--dim)">|</span>
+  <span>Area = employment</span>
+  <div id="legend-right">
+    <span class="outcome-dot" style="background:var(--green)"></span><span>Growing</span>
+    <span class="outcome-dot" style="background:var(--muted)"></span><span>Stable</span>
+    <span class="outcome-dot" style="background:var(--orange)"></span><span>Declining</span>
+  </div>
+</div>
+
+<!-- Main -->
+<div id="main">
+  <!-- Treemap -->
+  <div id="treemap-panel">
+    <svg id="treemap"></svg>
+    <div id="no-results">No occupations match your filters.</div>
+  </div>
+
+  <!-- List -->
+  <div id="list-panel">
+    <div id="list-head">
+      <div class="list-head-cell" data-sort="code">Code <span class="sort-arrow">↕</span></div>
+      <div class="list-head-cell" data-sort="title">Occupation <span class="sort-arrow">↕</span></div>
+      <div class="list-head-cell" data-sort="teer">TEER <span class="sort-arrow">↕</span></div>
+      <div class="list-head-cell" data-sort="wage">Wage <span class="sort-arrow">↕</span></div>
+      <div class="list-head-cell" data-sort="emp">Jobs <span class="sort-arrow">↕</span></div>
+      <div class="list-head-cell sorted" data-sort="score">AI Score <span class="sort-arrow">↓</span></div>
+    </div>
+    <div id="list-body"></div>
+  </div>
+
+  <!-- Detail -->
+  <div id="detail-panel">
+    <div id="detail-inner" style="position:relative;">
+      <button class="dp-close" id="detail-close">✕</button>
+      <div class="dp-code" id="dp-code"></div>
+      <div class="dp-score-row">
+        <div class="dp-title" id="dp-title"></div>
+        <div class="dp-big-score" id="dp-score"></div>
+      </div>
+      <div class="dp-boc" id="dp-boc"></div>
+      <div class="dp-teer" id="dp-teer"></div>
+      <div class="dp-bar-row">
+        <div class="dp-bar-label"><span>AI Exposure</span><span id="dp-score-num"></span></div>
+        <div class="dp-bar-bg"><div class="dp-bar-fill" id="dp-bar"></div></div>
+      </div>
+      <div class="dp-outlook-row" id="dp-outlook-row"></div>
+      <div class="dp-grid">
+        <div><div class="dp-stat-label">Employment</div><div class="dp-stat-val" id="dp-emp"></div></div>
+        <div><div class="dp-stat-label">Median Wage</div><div class="dp-stat-val" id="dp-wage"></div></div>
+        <div><div class="dp-stat-label">TEER Level</div><div class="dp-stat-val" id="dp-teer-val"></div></div>
+        <div><div class="dp-stat-label">BOC</div><div class="dp-stat-val" id="dp-boc-num"></div></div>
+      </div>
+      <div class="dp-divider"></div>
+      <div class="dp-section-title">AI Exposure Analysis</div>
+      <div class="dp-rationale" id="dp-rationale"></div>
+      <button class="dp-share-btn" id="dp-share">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+        </svg>
+        Copy link to this occupation
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Tooltip -->
+<div id="tooltip"><div class="tt-inner">
+  <div class="tt-code" id="tt-code"></div>
+  <div class="tt-title" id="tt-title"></div>
+  <div class="tt-cat" id="tt-cat"></div>
+  <div class="tt-score-row">
+    <div class="tt-badge" id="tt-badge"></div>
+    <div style="flex:1">
+      <div class="tt-score-bar-bg"><div class="tt-score-bar-fill" id="tt-bar"></div></div>
+    </div>
+  </div>
+  <div class="tt-meta" id="tt-meta"></div>
+</div></div>
+
+<!-- Footer -->
+<div id="footer">
+  <span>Data: <a href="https://noc.esdc.gc.ca/" target="_blank">ESDC NOC 2021</a> · <a href="https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1410002301" target="_blank">Stats Canada LFS</a> · AI scores by Claude</span>
+  <span id="footer-meta"></span>
+</div>
+
+<script>
+// ── Utilities ────────────────────────────────────────────────────────────────
+function scoreColor(s){
+  const t=s/10;
+  if(t<.5){const r=t*2;return`rgb(${Math.round(61+(245-61)*r)},${Math.round(220+(200-220)*r)},${Math.round(132+(66-132)*r)})`}
+  const r=(t-.5)*2;
+  return`rgb(${Math.round(245+(232-245)*r)},${Math.round(200+(64-200)*r)},${Math.round(66+(58-66)*r)})`;
+}
+function fmtEmp(v){return v>=1000?`${(v/1000).toFixed(1)}M`:v>=1?`${v.toFixed(0)}k`:`${Math.round(v*1e3)}`}
+function fmtWage(lo,hi){
+  const f=v=>v>=1000?`$${(v/1000).toFixed(0)}k`:`$${v}`;
+  return lo&&hi?`${f(lo)}–${f(hi)}`:lo?`${f(lo)}+`:"N/A";
+}
+function outlookStyle(o){
+  const map={growing:["var(--green)","Growing"],stable:["var(--muted)","Stable"],
+             declining:["var(--orange)","Declining"],uncertain:["var(--dim)","Uncertain"]};
+  return map[o]||map.stable;
+}
+
+// ── Treemap layout (squarify) ─────────────────────────────────────────────────
+function tmLayout(nodes,x0,y0,x1,y1){
+  const s=[...nodes].sort((a,b)=>b._v-a._v);
+  const tot=s.reduce((a,n)=>a+n._v,0);
+  return tot?_tile(s,tot,x0,y0,x1,y1):[];
+}
+function _squarifyRow(ns,tot,x0,y0,x1,y1){
+  const W=x1-x0,H=y1-y0;let p=W>=H?x0:y0;
+  return ns.map(n=>{const f=n._v/tot;
+    if(W>=H){const r={...n,_x0:p,_y0:y0,_x1:p+f*W,_y1:y1};p+=f*W;return r;}
+    const r={...n,_x0:x0,_y0:p,_x1:x1,_y1:p+f*H};p+=f*H;return r;
+  });
+}
+function _tile(ns,tot,x0,y0,x1,y1){
+  if(!ns.length)return[];
+  if(ns.length===1)return[{...ns[0],_x0:x0,_y0:y0,_x1:x1,_y1:y1}];
+  const W=x1-x0,H=y1-y0;
+  let best=Infinity,bi=1,rs=0;
+  for(let i=0;i<ns.length-1;i++){
+    rs+=ns[i]._v;
+    const f=rs/tot,g=1-f;
+    const a1=W>=H?Math.max(f*W/H,H/(f*W)):Math.max(W/(f*H),f*H/W);
+    const a2=W>=H?Math.max(g*W/H,H/(g*W)):Math.max(W/(g*H),g*H/W);
+    const w=Math.max(a1,a2);if(w<best){best=w;bi=i+1;}
+  }
+  const row=ns.slice(0,bi),rest=ns.slice(bi);
+  const rs2=row.reduce((a,n)=>a+n._v,0),f=rs2/tot;
+  if(W>=H){const m=x0+f*W;return[..._squarifyRow(row,rs2,x0,y0,m,y1),..._tile(rest,tot-rs2,m,y0,x1,y1)];}
+  const m=y0+f*H;return[..._squarifyRow(row,rs2,x0,y0,x1,m),..._tile(rest,tot-rs2,x0,m,x1,y1)];
+}
+
+// ── App state ─────────────────────────────────────────────────────────────────
+let DATA=null,META=null;
+let filterTeer="all",filterBoc="all",filterSearch="";
+let viewMode="treemap";
+let sortKey="score",sortDir=-1;
+let selectedCode=null;
+
+// ── Load data ─────────────────────────────────────────────────────────────────
+async function loadData(){
+  try{
+    const r=await fetch("data.json");
+    if(!r.ok)throw new Error(`HTTP ${r.status}`);
+    const json=await r.json();
+    META=json.meta;
+    // Convert array-of-arrays to objects
+    const cols=META.columns;
+    DATA=json.occupations.map(row=>{
+      const o={};cols.forEach((c,i)=>o[c]=row[i]);return o;
+    });
+    document.getElementById("loading").classList.add("hidden");
+    init();
+  }catch(e){
+    document.querySelector(".loading-text").textContent=`Error: ${e.message}. Make sure data.json exists (run scripts/build.py).`;
+  }
+}
+
+function getFiltered(){
+  return DATA.filter(d=>{
+    if(filterTeer!=="all"&&d.teer.toString()!==filterTeer)return false;
+    if(filterBoc!=="all"&&d.boc.toString()!==filterBoc)return false;
+    if(filterSearch){
+      const q=filterSearch.toLowerCase();
+      if(!d.title.toLowerCase().includes(q)&&!d.code.includes(q))return false;
+    }
+    return true;
+  });
+}
+
+function updateStats(data){
+  const n=data.length;
+  const avg=n?(data.reduce((s,d)=>s+d.score,0)/n).toFixed(1)+"/10":"—";
+  const jobs=data.reduce((s,d)=>s+d.employment_k,0);
+  document.getElementById("s-count").textContent=n.toLocaleString();
+  document.getElementById("s-avg").textContent=avg;
+  document.getElementById("s-jobs").textContent=jobs.toLocaleString();
+}
+
+// ── Treemap ───────────────────────────────────────────────────────────────────
+function renderTreemap(){
+  const data=getFiltered();
+  updateStats(data);
+
+  const svg=document.getElementById("treemap");
+  const panel=document.getElementById("treemap-panel");
+  const W=panel.clientWidth,H=panel.clientHeight;
+  svg.setAttribute("width",W);svg.setAttribute("height",H);
+
+  const noRes=document.getElementById("no-results");
+  if(!data.length){noRes.style.display="block";svg.innerHTML="";return;}
+  noRes.style.display="none";
+
+  // Group by BOC
+  const bocMap={};
+  for(const d of data){
+    if(!bocMap[d.boc])bocMap[d.boc]=[];
+    bocMap[d.boc].push({...d,_v:Math.max(d.employment_k,0.5)});
+  }
+  const bocNodes=Object.entries(bocMap)
+    .map(([b,items])=>({boc:parseInt(b),items,_v:items.reduce((s,i)=>s+i._v,0)}))
+    .sort((a,b)=>b._v-a._v);
+
+  const P=3,bocRects=tmLayout(bocNodes,P,P,W-P,H-P);
+
+  let html="";
+  for(const br of bocRects){
+    const bW=br._x1-br._x0,bH=br._y1-br._y0;
+    const INNER=bH>40?16:0;
+    const cells=tmLayout(br.items,br._x0+2,br._y0+INNER,br._x1-2,br._y1-2);
+
+    // BOC bg
+    html+=`<rect x="${br._x0}" y="${br._y0}" width="${bW}" height="${bH}" fill="rgba(255,255,255,0.018)" stroke="#08090d" stroke-width="1" rx="3"/>`;
+    if(bW>80&&bH>24){
+      const bocName=(META.boc_names||{})[br.boc]||`BOC ${br.boc}`;
+      const fs=Math.min(9,bW/14);
+      html+=`<text x="${br._x0+5}" y="${br._y0+12}" fill="rgba(255,255,255,0.18)" font-size="${fs}" font-weight="700" font-family="JetBrains Mono,monospace" style="text-transform:uppercase;letter-spacing:0.07em">${bocName}</text>`;
+    }
+
+    for(const cell of cells){
+      const cW=cell._x1-cell._x0,cH=cell._y1-cell._y0;
+      if(cW<2||cH<2)continue;
+      const col=scoreColor(cell.score);
+      const sel=cell.code===selectedCode;
+      const stroke=sel?"var(--accent)":"#08090d";
+      const sw=sel?2.5:1.2;
+      const fs=Math.min(11,Math.max(7,cW/13));
+      const titleMax=Math.floor(cW/(fs*.52));
+      const titleStr=cell.title.length>titleMax?cell.title.slice(0,titleMax-1)+"…":cell.title;
+
+      html+=`<g class="cell" data-code="${cell.code}" style="cursor:pointer">`;
+      html+=`<rect x="${cell._x0}" y="${cell._y0}" width="${Math.max(0,cW)}" height="${Math.max(0,cH)}" fill="${col}" opacity="0.88" rx="2" stroke="${stroke}" stroke-width="${sw}"/>`;
+      if(cW>40&&cH>20)html+=`<text x="${cell._x0+4}" y="${cell._y0+4+fs}" font-size="${fs}" font-weight="700" fill="rgba(255,255,255,.92)" style="pointer-events:none">${titleStr}</text>`;
+      if(cW>40&&cH>36)html+=`<text x="${cell._x0+4}" y="${cell._y0+4+fs*2.2}" font-size="${Math.max(7,fs*.78)}" fill="rgba(255,255,255,.38)" font-family="JetBrains Mono,monospace" style="pointer-events:none">${cell.code}</text>`;
+      if(cW>28&&cH>50)html+=`<text x="${cell._x0+4}" y="${cell._y1-4}" font-size="${Math.min(10,fs)}" fill="rgba(0,0,0,.6)" font-family="JetBrains Mono,monospace" font-weight="600" style="pointer-events:none">${cell.score.toFixed(1)}</text>`;
+      html+=`</g>`;
+    }
+  }
+  svg.innerHTML=html;
+
+  // Events
+  const tooltip=document.getElementById("tooltip");
+  svg.querySelectorAll(".cell").forEach(el=>{
+    const code=el.dataset.code;
+    const d=DATA.find(x=>x.code===code);
+    el.addEventListener("mouseenter",e=>{showTooltip(d,e);});
+    el.addEventListener("mousemove",e=>{posTooltip(e);});
+    el.addEventListener("mouseleave",()=>{tooltip.style.opacity="0";});
+    el.addEventListener("click",()=>{selectOccupation(code);});
+  });
+}
+
+// ── List view ─────────────────────────────────────────────────────────────────
+function renderList(){
+  const data=getFiltered();
+  updateStats(data);
+
+  const sorted=[...data].sort((a,b)=>{
+    const va=sortKey==="wage"?a.wage_low:sortKey==="emp"?a.employment_k:sortKey==="teer"?a.teer:sortKey==="code"?a.code:a[sortKey];
+    const vb=sortKey==="wage"?b.wage_low:sortKey==="emp"?b.employment_k:sortKey==="teer"?b.teer:sortKey==="code"?b.code:b[sortKey];
+    return sortDir*(va<vb?-1:va>vb?1:0);
+  });
+
+  document.querySelectorAll(".list-head-cell").forEach(el=>{
+    const s=el.dataset.sort;
+    const arrow=el.querySelector(".sort-arrow");
+    el.classList.toggle("sorted",s===sortKey);
+    if(arrow)arrow.textContent=s===sortKey?(sortDir>0?"↑":"↓"):"↕";
+  });
+
+  const body=document.getElementById("list-body");
+  const rows=sorted.map(d=>{
+    const col=scoreColor(d.score);
+    const [oCol,oLabel]=outlookStyle(d.outlook);
+    const sel=d.code===selectedCode?"selected":"";
+    return`<div class="list-row ${sel}" data-code="${d.code}">
+      <div class="lr-code">${d.code}</div>
+      <div><div class="lr-title">${d.title}</div><span class="outlook-chip" style="background:${oCol}22;color:${oCol};">${oLabel}</span></div>
+      <div class="lr-teer">TEER ${d.teer}</div>
+      <div class="lr-wage">${fmtWage(d.wage_low,d.wage_high)}</div>
+      <div class="lr-emp">${fmtEmp(d.employment_k)}</div>
+      <div class="lr-score">
+        <div class="score-badge" style="background:${col}">${d.score.toFixed(1)}</div>
+        <div class="score-bar-bg"><div class="score-bar-fill" style="width:${d.score*10}%;background:${col}"></div></div>
+      </div>
+    </div>`;
+  }).join("");
+  body.innerHTML=rows;
+
+  body.querySelectorAll(".list-row").forEach(el=>{
+    el.addEventListener("click",()=>selectOccupation(el.dataset.code));
+  });
+}
+
+// ── Detail panel ──────────────────────────────────────────────────────────────
+function selectOccupation(code){
+  selectedCode=code;
+  const d=DATA.find(x=>x.code===code);
+  if(!d)return;
+
+  const col=scoreColor(d.score);
+  const bocName=(META.boc_names||{})[d.boc]||`BOC ${d.boc}`;
+  const teerDesc=(META.teer_descriptions||{})[d.teer.toString()]||`TEER ${d.teer}`;
+  const [oCol,oLabel]=outlookStyle(d.outlook);
+
+  document.getElementById("dp-code").textContent=`NOC ${d.code}`;
+  document.getElementById("dp-title").textContent=d.title;
+  document.getElementById("dp-score").textContent=d.score.toFixed(1);
+  document.getElementById("dp-score").style.background=col;
+  document.getElementById("dp-boc").textContent=bocName;
+  document.getElementById("dp-teer").textContent=teerDesc;
+  document.getElementById("dp-score-num").textContent=`${d.score.toFixed(1)} / 10`;
+  document.getElementById("dp-bar").style.width=`${d.score*10}%`;
+  document.getElementById("dp-bar").style.background=col;
+  document.getElementById("dp-emp").textContent=`~${fmtEmp(d.employment_k)}`;
+  document.getElementById("dp-wage").textContent=fmtWage(d.wage_low,d.wage_high);
+  document.getElementById("dp-teer-val").textContent=`TEER ${d.teer}`;
+  document.getElementById("dp-boc-num").textContent=`BOC ${d.boc}`;
+  document.getElementById("dp-rationale").textContent=d.rationale||"No rationale available.";
+  document.getElementById("dp-outlook-row").innerHTML=
+    `<span class="outlook-chip" style="background:${oCol}22;color:${oCol};">${oLabel} outlook</span>`;
+
+  const panel=document.getElementById("detail-panel");
+  panel.classList.add("visible");
+
+  // Update URL
+  const url=new URL(window.location);
+  url.searchParams.set("code",code);
+  history.replaceState(null,"",url);
+
+  // Redraw to highlight selection
+  if(viewMode==="treemap")renderTreemap();
+  else renderList();
+}
+
+function closeDetail(){
+  selectedCode=null;
+  document.getElementById("detail-panel").classList.remove("visible");
+  const url=new URL(window.location);
+  url.searchParams.delete("code");
+  history.replaceState(null,"",url);
+  if(viewMode==="treemap")renderTreemap();
+  else renderList();
+}
+
+// ── Tooltip ───────────────────────────────────────────────────────────────────
+function showTooltip(d,e){
+  const bocName=(META.boc_names||{})[d.boc]||`BOC ${d.boc}`;
+  const col=scoreColor(d.score);
+  const [oCol,oLabel]=outlookStyle(d.outlook);
+  document.getElementById("tt-code").textContent=`NOC ${d.code}`;
+  document.getElementById("tt-title").textContent=d.title;
+  document.getElementById("tt-cat").textContent=`${bocName} · TEER ${d.teer}`;
+  document.getElementById("tt-badge").textContent=d.score.toFixed(1);
+  document.getElementById("tt-badge").style.background=col;
+  document.getElementById("tt-bar").style.width=`${d.score*10}%`;
+  document.getElementById("tt-bar").style.background=col;
+  document.getElementById("tt-meta").innerHTML=
+    `<span>~${fmtEmp(d.employment_k)} jobs</span><span>${fmtWage(d.wage_low,d.wage_high)}</span>`+
+    `<span style="color:${oCol}">${oLabel}</span>`;
+  posTooltip(e);
+  document.getElementById("tooltip").style.opacity="1";
+}
+function posTooltip(e){
+  const t=document.getElementById("tooltip");
+  const tw=290,th=130;
+  t.style.left=`${Math.min(e.clientX+14,window.innerWidth-tw-10)}px`;
+  t.style.top=`${Math.min(e.clientY+14,window.innerHeight-th-10)}px`;
+}
+
+// ── Share button ──────────────────────────────────────────────────────────────
+document.getElementById("dp-share").addEventListener("click",()=>{
+  const url=window.location.href;
+  navigator.clipboard.writeText(url).then(()=>{
+    const btn=document.getElementById("dp-share");
+    btn.classList.add("copied");btn.innerHTML="✓ Link copied!";
+    setTimeout(()=>{btn.classList.remove("copied");btn.innerHTML=`<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Copy link to this occupation`;},2000);
+  });
+});
+document.getElementById("detail-close").addEventListener("click",closeDetail);
+
+// ── Render dispatcher ─────────────────────────────────────────────────────────
+function render(){
+  if(viewMode==="treemap")renderTreemap();
+  else renderList();
+}
+
+// ── View toggle ───────────────────────────────────────────────────────────────
+document.getElementById("btn-treemap").addEventListener("click",()=>{
+  viewMode="treemap";
+  document.getElementById("btn-treemap").classList.add("on");
+  document.getElementById("btn-list").classList.remove("on");
+  document.getElementById("treemap-panel").style.display="";
+  document.getElementById("list-panel").classList.remove("visible");
+  renderTreemap();
+});
+document.getElementById("btn-list").addEventListener("click",()=>{
+  viewMode="list";
+  document.getElementById("btn-list").classList.add("on");
+  document.getElementById("btn-treemap").classList.remove("on");
+  document.getElementById("treemap-panel").style.display="none";
+  document.getElementById("list-panel").classList.add("visible");
+  renderList();
+});
+
+// ── Filters ───────────────────────────────────────────────────────────────────
+document.querySelectorAll("#teer-chips .chip").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    document.querySelectorAll("#teer-chips .chip").forEach(b=>b.classList.remove("on"));
+    btn.classList.add("on");filterTeer=btn.dataset.teer;render();
+  });
+});
+document.querySelectorAll("#boc-chips .chip").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    document.querySelectorAll("#boc-chips .chip").forEach(b=>b.classList.remove("on"));
+    btn.classList.add("on");filterBoc=btn.dataset.boc;render();
+  });
+});
+document.getElementById("search").addEventListener("input",e=>{
+  filterSearch=e.target.value;render();
+});
+
+// ── List sort ─────────────────────────────────────────────────────────────────
+document.querySelectorAll(".list-head-cell").forEach(el=>{
+  el.addEventListener("click",()=>{
+    const k=el.dataset.sort;
+    if(k===sortKey)sortDir*=-1;else{sortKey=k;sortDir=-1;}
+    renderList();
+  });
+});
+
+// ── Resize ────────────────────────────────────────────────────────────────────
+let resizeTimer;
+window.addEventListener("resize",()=>{
+  clearTimeout(resizeTimer);
+  resizeTimer=setTimeout(()=>{if(viewMode==="treemap")renderTreemap();},120);
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+function init(){
+  document.getElementById("footer-meta").textContent=
+    `${META.total_occupations} occupations · Employment: ${META.employment_source}`;
+
+  // Check for deep-link code in URL
+  const params=new URLSearchParams(window.location.search);
+  const deepCode=params.get("code");
+
+  renderTreemap();
+
+  if(deepCode){
+    setTimeout(()=>selectOccupation(deepCode),100);
+  }
+}
+
+loadData();
+</script>
+</body>
+</html>
