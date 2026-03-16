@@ -1,4 +1,4 @@
-h"""
+"""
 build.py — Merge all data sources into site/data.json.
 
 Priority order for scores:
