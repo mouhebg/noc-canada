@@ -535,7 +535,7 @@ def main():
     print("\n  Outlook distribution (national, 2025-2027):")
     for label in ["very_good", "good", "moderate", "limited", "very_limited", "undetermined"]:
         count = dist.get(label, 0)
-        bar = "★" * count // 3
+        bar = "★" * (count // 3)
         print(f"    {label:12s}  {bar} {count}")
 
     OUT.write_text(json.dumps(out, indent=2, ensure_ascii=False))
