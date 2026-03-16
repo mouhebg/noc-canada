@@ -23,7 +23,7 @@ FLAGS_FILE = DATA_DIR / "flagged_disagreements.json"
 sys.path.insert(0, str(Path(__file__).parent))
 from noc_list import NOC_UNIT_GROUPS, BOC_NAMES, TEER_DESCRIPTIONS
 
-GEMINI_MODEL = "gemini-2.0-flash-lite"
+GEMINI_MODEL = "gemini-2.0-flash"
 GEMINI_URL   = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
     f"{GEMINI_MODEL}:generateContent?key={{api_key}}"
