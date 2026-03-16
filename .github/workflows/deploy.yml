@@ -1,0 +1,68 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Step 1: Fetch real LFS employment numbers (no API key needed)
+      - name: Fetch LFS employment data
+        run: python scripts/fetch_lfs.py
+
+      # Step 2: Fetch Job Bank 2025-2027 employment outlooks (no API key needed)
+      - name: Fetch Job Bank outlooks
+        run: python scripts/fetch_jobbank.py
+
+      # Step 3: Score all occupations using task-level methodology + Job Bank anchoring
+      # Requires GEMINI_API_KEY secret: Settings → Secrets → Actions → New secret
+      - name: Score occupations with Gemini
+        if: env.GEMINI_API_KEY != ''
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python scripts/score_v3.py
+
+      # Step 4: Build site/data.json from all sources
+      - name: Build site data
+        run: python scripts/build.py
+
+      # Step 5: Deploy to GitHub Pages
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
