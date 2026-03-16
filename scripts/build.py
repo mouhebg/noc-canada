@@ -57,8 +57,8 @@ def main():
     out_file.write_text(json.dumps(out,ensure_ascii=False,separators=(",",":")))
     print(f"Built site/data.json — {len(occupations)} occupations, avg={avg_score:.2f}/10, {out_file.stat().st_size//1024}KB")
 
-  # Copy index.html into site/ for GitHub Pages
-  shutil.copy(ROOT / "index.html", SITE_DIR / "index.html")
-  print("Copied index.html -> site/index.html")
+    # Copy index.html into site/ for GitHub Pages
+    shutil.copy(ROOT / "index.html", SITE_DIR / "index.html")
+    print("Copied index.html -> site/index.html")
 if __name__=="__main__":
     main()
