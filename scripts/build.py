@@ -5,7 +5,7 @@ Priority order for scores:
   1. scores_v2.json  (multi-pass, calibrated, sub-dimension)
   2. scores.json     (v1 single-pass fallback)
 """
-import json, sys
+import json, sys, shutil
 from pathlib import Path
 ROOT = Path(__file__).parent.parent
 DATA_DIR = ROOT / "data"
@@ -56,5 +56,6 @@ def main():
     out_file=SITE_DIR/"data.json"
     out_file.write_text(json.dumps(out,ensure_ascii=False,separators=(",",":")))
     print(f"Built site/data.json — {len(occupations)} occupations, avg={avg_score:.2f}/10, {out_file.stat().st_size//1024}KB")
+      shutil.copy(ROOT / "index.html", SITE_DIR / "index.html")
 if __name__=="__main__":
     main()
