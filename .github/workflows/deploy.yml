@@ -44,7 +44,7 @@ jobs:
         run: python scripts/score_v2.py
 
       - name: Build site data
-        run: python scripts/build.py
+        run: python scripts/build.py && cp index.html site/
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
